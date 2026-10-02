@@ -49,6 +49,7 @@ export default function AdminPartnersPage() {
   const [isAddPartnerOpen, setIsAddPartnerOpen] = useState(false)
   const [isAdding, setIsAdding] = useState(false)
   const [isPayoutHistoryOpen, setIsPayoutHistoryOpen] = useState(false)
+  const [formErrors, setFormErrors] = useState({})
   const [newPartner, setNewPartner] = useState({
     name: '',
     phone: '',
@@ -62,24 +63,131 @@ export default function AdminPartnersPage() {
     status: 'active'
   })
 
+  const validateField = (field, value) => {
+    let error = ''
+    switch (field) {
+      case 'name': {
+        const val = value?.trim() || ''
+        if (!val) error = 'Full name is required'
+        else if (val.length < 2) error = 'Name must be at least 2 characters'
+        else if (val.length > 50) error = 'Name cannot exceed 50 characters'
+        else if (!/^[a-zA-Z\s.'-]+$/.test(val)) error = 'Name must contain letters only'
+        break
+      }
+      case 'phone': {
+        const val = value?.trim() || ''
+        if (!val) {
+          error = 'Phone number is required'
+        } else {
+          const digits = val.replace(/\D/g, '')
+          const isValid10 = digits.length === 10 && /^[6-9]\d{9}$/.test(digits)
+          const isValid12 = digits.length === 12 && /^91[6-9]\d{9}$/.test(digits)
+          const isValid11 = digits.length === 11 && /^0[6-9]\d{9}$/.test(digits)
+          if (!isValid10 && !isValid12 && !isValid11) {
+            error = 'Enter a valid 10-digit mobile number (e.g. 9876543210)'
+          }
+        }
+        break
+      }
+      case 'email': {
+        const val = value?.trim() || ''
+        if (val && !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(val)) {
+          error = 'Enter a valid email address (e.g. name@domain.com)'
+        }
+        break
+      }
+      case 'city': {
+        const val = value?.trim() || ''
+        if (val && val.length < 2) {
+          error = 'City must be at least 2 characters'
+        }
+        break
+      }
+      case 'vehicleNumber': {
+        const val = value?.replace(/[\s-]/g, '').toUpperCase() || ''
+        if (val && !/^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$/.test(val)) {
+          error = 'Enter a valid vehicle number (e.g. MH-12-AB-1234)'
+        }
+        break
+      }
+      case 'licenseNumber': {
+        const val = value?.replace(/[\s-]/g, '').toUpperCase() || ''
+        if (val && !/^[A-Z]{2}[0-9A-Z]{7,16}$/.test(val)) {
+          error = 'Enter a valid driving license (e.g. DL-1420110012345)'
+        }
+        break
+      }
+      case 'walletBalance': {
+        const num = Number(value)
+        if (isNaN(num) || num < 0) {
+          error = 'Balance cannot be negative'
+        } else if (num > 50000) {
+          error = 'Initial balance cannot exceed ₹50,000'
+        }
+        break
+      }
+      default:
+        break
+    }
+    setFormErrors(prev => ({ ...prev, [field]: error }))
+    return error
+  }
+
+  const validateAllFields = (data) => {
+    const fields = ['name', 'phone', 'email', 'city', 'vehicleNumber', 'licenseNumber', 'walletBalance']
+    const errors = {}
+    fields.forEach(f => {
+      const err = validateField(f, data[f])
+      if (err) errors[f] = err
+    })
+    setFormErrors(errors)
+    return errors
+  }
+
   const handleAddPartnerSubmit = async (e) => {
     e.preventDefault()
-    if (!newPartner.name.trim()) {
-      return toast.error("Please enter the partner's name")
-    }
-    if (!newPartner.phone.trim()) {
-      return toast.error("Please enter a contact phone number")
+    const errors = validateAllFields(newPartner)
+    const errorKeys = Object.keys(errors).filter(k => !!errors[k])
+    if (errorKeys.length > 0) {
+      toast.error(errors[errorKeys[0]])
+      return
     }
 
     setIsAdding(true)
     try {
       const generatedId = `AGRO-DL-${Math.floor(1000 + Math.random() * 9000)}`
+      
+      // Normalize phone number to standard Indian format: +91 XXXXX XXXXX
+      const digits = newPartner.phone.replace(/\D/g, '')
+      const pure10 = digits.length === 12 && digits.startsWith('91')
+        ? digits.slice(2)
+        : digits.length === 11 && digits.startsWith('0')
+        ? digits.slice(1)
+        : digits
+      const formattedPhone = `+91 ${pure10.slice(0, 5)} ${pure10.slice(5)}`
+
+      // Format vehicle number nicely with hyphens: MH-12-AB-1234 if matched
+      let formattedVehicle = newPartner.vehicleNumber?.trim().toUpperCase() || ''
+      const vehClean = formattedVehicle.replace(/[\s-]/g, '')
+      const vehMatch = vehClean.match(/^([A-Z]{2})([0-9]{1,2})([A-Z]{1,3})([0-9]{4})$/)
+      if (vehMatch) {
+        formattedVehicle = `${vehMatch[1]}-${vehMatch[2]}-${vehMatch[3]}-${vehMatch[4]}`
+      }
+
       await addDeliveryPartner({
         ...newPartner,
+        name: newPartner.name.trim(),
+        phone: formattedPhone,
+        email: newPartner.email.trim(),
+        city: newPartner.city.trim(),
+        vehicleNumber: formattedVehicle,
+        licenseNumber: newPartner.licenseNumber?.trim().toUpperCase() || '',
+        walletBalance: Number(newPartner.walletBalance || 0),
         deliveryId: generatedId
       })
-      toast.success(`Partner "${newPartner.name}" registered successfully (${generatedId})`)
+      toast.success(`Partner "${newPartner.name.trim()}" registered successfully (${generatedId})`)
       setIsAddPartnerOpen(false)
+      setFormErrors({})
       setNewPartner({
         name: '',
         phone: '',
@@ -253,7 +361,10 @@ export default function AdminPartnersPage() {
           </Dialog>
 
           {/* Add New Partner Modal */}
-          <Dialog open={isAddPartnerOpen} onOpenChange={setIsAddPartnerOpen}>
+          <Dialog open={isAddPartnerOpen} onOpenChange={(open) => {
+            setIsAddPartnerOpen(open);
+            if (!open) setFormErrors({});
+          }}>
             <DialogTrigger asChild>
               <Button className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm">
                 <Truck className="h-4 w-4 mr-2" /> Add New Partner
@@ -281,21 +392,46 @@ export default function AdminPartnersPage() {
                     <Input 
                       placeholder="e.g. Rahul Sharma"
                       value={newPartner.name}
-                      onChange={e => setNewPartner(prev => ({ ...prev, name: e.target.value }))}
+                      maxLength={50}
+                      onChange={e => {
+                        const val = e.target.value
+                        setNewPartner(prev => ({ ...prev, name: val }))
+                        if (formErrors.name) validateField('name', val)
+                      }}
+                      onBlur={() => validateField('name', newPartner.name)}
                       required
-                      className="h-10 text-sm"
+                      className={`h-10 text-sm ${formErrors.name ? 'border-rose-400 focus-visible:ring-rose-400 bg-rose-50/20' : ''}`}
                     />
+                    {formErrors.name && (
+                      <p className="text-[11px] font-medium text-rose-500 flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3 inline shrink-0" /> {formErrors.name}
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
                     <Label className="text-xs font-semibold text-slate-700">Phone Number *</Label>
                     <Input 
-                      placeholder="e.g. +91 98765 43210"
+                      placeholder="e.g. 9876543210"
                       value={newPartner.phone}
-                      onChange={e => setNewPartner(prev => ({ ...prev, phone: e.target.value }))}
+                      maxLength={15}
+                      onChange={e => {
+                        // Allow digits, spaces, plus, dash only
+                        const val = e.target.value.replace(/[^0-9+\s-]/g, '')
+                        setNewPartner(prev => ({ ...prev, phone: val }))
+                        if (formErrors.phone) validateField('phone', val)
+                      }}
+                      onBlur={() => validateField('phone', newPartner.phone)}
                       required
-                      className="h-10 text-sm"
+                      className={`h-10 text-sm font-mono ${formErrors.phone ? 'border-rose-400 focus-visible:ring-rose-400 bg-rose-50/20' : ''}`}
                     />
+                    {formErrors.phone ? (
+                      <p className="text-[11px] font-medium text-rose-500 flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3 inline shrink-0" /> {formErrors.phone}
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-slate-400">10-digit mobile (e.g. 9876543210)</p>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
@@ -304,9 +440,20 @@ export default function AdminPartnersPage() {
                       type="email"
                       placeholder="e.g. rahul.delivery@kisanmart.com"
                       value={newPartner.email}
-                      onChange={e => setNewPartner(prev => ({ ...prev, email: e.target.value }))}
-                      className="h-10 text-sm"
+                      maxLength={60}
+                      onChange={e => {
+                        const val = e.target.value
+                        setNewPartner(prev => ({ ...prev, email: val }))
+                        if (formErrors.email) validateField('email', val)
+                      }}
+                      onBlur={() => validateField('email', newPartner.email)}
+                      className={`h-10 text-sm ${formErrors.email ? 'border-rose-400 focus-visible:ring-rose-400 bg-rose-50/20' : ''}`}
                     />
+                    {formErrors.email && (
+                      <p className="text-[11px] font-medium text-rose-500 flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3 inline shrink-0" /> {formErrors.email}
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
@@ -314,9 +461,20 @@ export default function AdminPartnersPage() {
                     <Input 
                       placeholder="e.g. Pune / Nashik"
                       value={newPartner.city}
-                      onChange={e => setNewPartner(prev => ({ ...prev, city: e.target.value }))}
-                      className="h-10 text-sm"
+                      maxLength={40}
+                      onChange={e => {
+                        const val = e.target.value
+                        setNewPartner(prev => ({ ...prev, city: val }))
+                        if (formErrors.city) validateField('city', val)
+                      }}
+                      onBlur={() => validateField('city', newPartner.city)}
+                      className={`h-10 text-sm ${formErrors.city ? 'border-rose-400 focus-visible:ring-rose-400 bg-rose-50/20' : ''}`}
                     />
+                    {formErrors.city && (
+                      <p className="text-[11px] font-medium text-rose-500 flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3 inline shrink-0" /> {formErrors.city}
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
@@ -343,9 +501,22 @@ export default function AdminPartnersPage() {
                     <Input 
                       placeholder="e.g. MH-12-AB-9876"
                       value={newPartner.vehicleNumber}
-                      onChange={e => setNewPartner(prev => ({ ...prev, vehicleNumber: e.target.value.toUpperCase() }))}
-                      className="h-10 text-sm font-mono uppercase"
+                      maxLength={14}
+                      onChange={e => {
+                        const val = e.target.value.toUpperCase()
+                        setNewPartner(prev => ({ ...prev, vehicleNumber: val }))
+                        if (formErrors.vehicleNumber) validateField('vehicleNumber', val)
+                      }}
+                      onBlur={() => validateField('vehicleNumber', newPartner.vehicleNumber)}
+                      className={`h-10 text-sm font-mono uppercase ${formErrors.vehicleNumber ? 'border-rose-400 focus-visible:ring-rose-400 bg-rose-50/20' : ''}`}
                     />
+                    {formErrors.vehicleNumber ? (
+                      <p className="text-[11px] font-medium text-rose-500 flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3 inline shrink-0" /> {formErrors.vehicleNumber}
+                      </p>
+                    ) : (
+                      <p className="text-[10px] text-slate-400">e.g. MH-12-AB-9876 or DL01A1234</p>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
@@ -353,9 +524,20 @@ export default function AdminPartnersPage() {
                     <Input 
                       placeholder="e.g. DL-1420110012345"
                       value={newPartner.licenseNumber}
-                      onChange={e => setNewPartner(prev => ({ ...prev, licenseNumber: e.target.value.toUpperCase() }))}
-                      className="h-10 text-sm font-mono uppercase"
+                      maxLength={18}
+                      onChange={e => {
+                        const val = e.target.value.toUpperCase()
+                        setNewPartner(prev => ({ ...prev, licenseNumber: val }))
+                        if (formErrors.licenseNumber) validateField('licenseNumber', val)
+                      }}
+                      onBlur={() => validateField('licenseNumber', newPartner.licenseNumber)}
+                      className={`h-10 text-sm font-mono uppercase ${formErrors.licenseNumber ? 'border-rose-400 focus-visible:ring-rose-400 bg-rose-50/20' : ''}`}
                     />
+                    {formErrors.licenseNumber && (
+                      <p className="text-[11px] font-medium text-rose-500 flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3 inline shrink-0" /> {formErrors.licenseNumber}
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
@@ -363,11 +545,22 @@ export default function AdminPartnersPage() {
                     <Input 
                       type="number"
                       min="0"
+                      max="50000"
                       placeholder="0"
                       value={newPartner.walletBalance}
-                      onChange={e => setNewPartner(prev => ({ ...prev, walletBalance: Number(e.target.value) }))}
-                      className="h-10 text-sm"
+                      onChange={e => {
+                        const val = e.target.value
+                        setNewPartner(prev => ({ ...prev, walletBalance: val }))
+                        if (formErrors.walletBalance) validateField('walletBalance', val)
+                      }}
+                      onBlur={() => validateField('walletBalance', newPartner.walletBalance)}
+                      className={`h-10 text-sm ${formErrors.walletBalance ? 'border-rose-400 focus-visible:ring-rose-400 bg-rose-50/20' : ''}`}
                     />
+                    {formErrors.walletBalance && (
+                      <p className="text-[11px] font-medium text-rose-500 flex items-center gap-1 mt-1">
+                        <AlertCircle className="h-3 w-3 inline shrink-0" /> {formErrors.walletBalance}
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-1.5">
