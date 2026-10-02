@@ -21,7 +21,7 @@ export async function uploadToS3(formData) {
     await s3Client.send(command);
 
     // Construct the public URL (assuming public read access or CloudFront)
-    const region = process.env.AWS_REGION || process.env.NEXT_PUBLIC_AWS_REGION || "us-east-1";
+    const region = process.env.AWS_REGION || process.env.NEXT_PUBLIC_AWS_REGION || "ap-south-1";
     const url = `https://${BUCKET_NAME}.s3.${region}.amazonaws.com/products/${fileName}`;
 
     return { success: true, url };

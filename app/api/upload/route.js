@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const s3Client = new S3Client({
-  region: process.env.AWS_REGION,
+  region: process.env.AWS_REGION || "ap-south-1",
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -33,7 +33,8 @@ export async function POST(request) {
 
     await s3Client.send(command);
 
-    const url = `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${fileName}`;
+    const region = process.env.AWS_REGION || "ap-south-1";
+    const url = `https://${process.env.AWS_BUCKET_NAME}.s3.${region}.amazonaws.com/${fileName}`;
 
 
     return NextResponse.json({ url });
