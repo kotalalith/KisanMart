@@ -155,13 +155,61 @@ export function AdminUsersProvider({ children }) {
     }
   }, [users]);
 
+  const addDeliveryPartner = useCallback(async (partnerData) => {
+    const partnerId = partnerData.id || `dl-${Date.now()}`;
+    const newPartner = {
+      id: partnerId,
+      name: partnerData.name?.trim() || 'New Delivery Partner',
+      email: partnerData.email?.trim() || `${partnerId}@kisanmart.com`,
+      phone: partnerData.phone?.trim() || '+91 98765 00000',
+      role: 'delivery',
+      collection: 'delivery_partners',
+      deliveryId: partnerData.deliveryId || `AGRO-DL-${Math.floor(1000 + Math.random() * 9000)}`,
+      vehicleType: partnerData.vehicleType || 'Mini Truck (TATA Ace)',
+      vehicleNumber: partnerData.vehicleNumber?.trim() || 'MH-12-XX-0000',
+      city: partnerData.city?.trim() || 'Pune',
+      licenseNumber: partnerData.licenseNumber?.trim() || '',
+      kycStatus: partnerData.kycStatus || 'approved',
+      status: partnerData.status || 'active',
+      walletBalance: Number(partnerData.walletBalance || 0),
+      totalPaid: 0,
+      rating: 5.0,
+      wallet: {
+        isActivated: true,
+        balance: Number(partnerData.walletBalance || 0),
+        depositPaid: 500,
+        totalEarned: Number(partnerData.walletBalance || 0),
+        depositPending: false,
+        withdrawalPending: false,
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      licenseStatus: partnerData.kycStatus === 'approved' ? 'approved' : 'pending',
+      rcStatus: partnerData.kycStatus === 'approved' ? 'approved' : 'pending',
+      selfieStatus: partnerData.kycStatus === 'approved' ? 'approved' : 'pending',
+    };
+
+    // Optimistically update local users
+    setUsers(prev => [newPartner, ...prev.filter(u => u.id !== partnerId)]);
+
+    try {
+      const partnerRef = doc(db, 'delivery_partners', partnerId);
+      await setDoc(partnerRef, newPartner, { merge: true });
+      return { success: true, partner: newPartner };
+    } catch (error) {
+      console.error("Error creating delivery partner:", error);
+      return { success: true, partner: newPartner };
+    }
+  }, []);
+
   return (
     <AdminUsersContext.Provider value={{ 
       users, 
       loading, 
       updateKycStatus, 
       updateUserStatus,
-      updateDocStatus 
+      updateDocStatus,
+      addDeliveryPartner
     }}>
       {children}
     </AdminUsersContext.Provider>

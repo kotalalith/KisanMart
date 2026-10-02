@@ -31,18 +31,73 @@ import {
   Camera,
   ChevronRight,
   MapPin,
-  Check
+  Check,
+  Loader2,
+  Plus
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { db } from '@/lib/firebase'
 import { doc, updateDoc, increment } from 'firebase/firestore'
 
 export default function AdminPartnersPage() {
-  const { users, loading, updateKycStatus, updateUserStatus, updateDocStatus } = useAdminUsers()
+  const { users, loading, updateKycStatus, updateUserStatus, updateDocStatus, addDeliveryPartner } = useAdminUsers()
   const [searchQuery, setSearchQuery] = useState('')
   const [activeTab, setActiveTab] = useState('all')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isAddPartnerOpen, setIsAddPartnerOpen] = useState(false)
+  const [isAdding, setIsAdding] = useState(false)
+  const [isPayoutHistoryOpen, setIsPayoutHistoryOpen] = useState(false)
+  const [newPartner, setNewPartner] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    vehicleType: 'Mini Truck (TATA Ace)',
+    vehicleNumber: '',
+    city: 'Pune',
+    licenseNumber: '',
+    walletBalance: 0,
+    kycStatus: 'approved',
+    status: 'active'
+  })
+
+  const handleAddPartnerSubmit = async (e) => {
+    e.preventDefault()
+    if (!newPartner.name.trim()) {
+      return toast.error("Please enter the partner's name")
+    }
+    if (!newPartner.phone.trim()) {
+      return toast.error("Please enter a contact phone number")
+    }
+
+    setIsAdding(true)
+    try {
+      const generatedId = `AGRO-DL-${Math.floor(1000 + Math.random() * 9000)}`
+      await addDeliveryPartner({
+        ...newPartner,
+        deliveryId: generatedId
+      })
+      toast.success(`Partner "${newPartner.name}" registered successfully (${generatedId})`)
+      setIsAddPartnerOpen(false)
+      setNewPartner({
+        name: '',
+        phone: '',
+        email: '',
+        vehicleType: 'Mini Truck (TATA Ace)',
+        vehicleNumber: '',
+        city: 'Pune',
+        licenseNumber: '',
+        walletBalance: 0,
+        kycStatus: 'approved',
+        status: 'active'
+      })
+    } catch (err) {
+      toast.error("Failed to add partner")
+    } finally {
+      setIsAdding(false)
+    }
+  }
 
   const partners = useMemo(() => users.filter(u => u.role === 'delivery' || u.collection === 'delivery_partners'), [users])
 
@@ -110,12 +165,272 @@ export default function AdminPartnersPage() {
            <p className="text-slate-500 mt-1">Monitor logistics performance, verify documents, and manage financial settlements.</p>
         </div>
         <div className="flex items-center gap-3">
-           <Button variant="outline" className="border-slate-200 text-slate-600 font-semibold">
-              <History className="h-4 w-4 mr-2" /> Payout History
-           </Button>
-           <Button className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold">
-              <Truck className="h-4 w-4 mr-2" /> Add New Partner
-           </Button>
+          {/* Payout History Modal */}
+          <Dialog open={isPayoutHistoryOpen} onOpenChange={setIsPayoutHistoryOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="border-slate-200 text-slate-600 font-semibold hover:bg-slate-50">
+                <History className="h-4 w-4 mr-2" /> Payout History
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-3xl bg-white border border-slate-200 shadow-2xl rounded-2xl p-0 overflow-hidden">
+              <DialogHeader className="px-8 py-6 border-b bg-slate-50/50">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                    <History className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-xl font-bold text-slate-900">Partner Settlements & Payout History</DialogTitle>
+                    <DialogDescription className="text-xs text-slate-500">
+                      Summary of payouts settled and pending liabilities across your logistics fleet.
+                    </DialogDescription>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              <div className="p-8 max-h-[70vh] overflow-y-auto space-y-6">
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="p-4 rounded-xl border border-slate-100 bg-slate-50">
+                    <span className="text-[10px] font-bold uppercase text-slate-400">Total Settled</span>
+                    <div className="text-2xl font-bold text-emerald-600 mt-1">
+                      ₹{partners.reduce((acc, p) => acc + (p.totalPaid || 0), 0).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl border border-slate-100 bg-indigo-50/40">
+                    <span className="text-[10px] font-bold uppercase text-indigo-500">Pending Liability</span>
+                    <div className="text-2xl font-bold text-indigo-600 mt-1">
+                      ₹{partners.reduce((acc, p) => acc + (p.walletBalance || 0), 0).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="p-4 rounded-xl border border-slate-100 bg-slate-50">
+                    <span className="text-[10px] font-bold uppercase text-slate-400">Fleet Count</span>
+                    <div className="text-2xl font-bold text-slate-900 mt-1">
+                      {partners.length}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                  <Table>
+                    <TableHeader className="bg-slate-50">
+                      <TableRow>
+                        <TableHead className="text-xs uppercase font-semibold text-slate-600 pl-4">Partner Identity</TableHead>
+                        <TableHead className="text-xs uppercase font-semibold text-slate-600 text-center">Already Settled</TableHead>
+                        <TableHead className="text-xs uppercase font-semibold text-slate-600 text-center">Current Wallet</TableHead>
+                        <TableHead className="text-xs uppercase font-semibold text-slate-600 text-right pr-4">Last Payout</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {partners.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={4} className="text-center py-8 text-slate-400 text-sm">
+                            No partners found.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        partners.map(p => (
+                          <TableRow key={p.id} className="hover:bg-slate-50/50">
+                            <TableCell className="pl-4">
+                              <div className="font-semibold text-slate-900 text-sm">{p.name}</div>
+                              <div className="text-[11px] text-slate-400 uppercase font-mono">{p.deliveryId || p.id}</div>
+                            </TableCell>
+                            <TableCell className="text-center font-bold text-emerald-600 text-sm">
+                              ₹{(p.totalPaid || 0).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-center font-bold text-slate-900 text-sm">
+                              ₹{(p.walletBalance || 0).toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-right pr-4 text-xs text-slate-500 font-medium">
+                              {p.lastPayoutDate ? new Date(p.lastPayoutDate).toLocaleDateString() : 'Never'}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Add New Partner Modal */}
+          <Dialog open={isAddPartnerOpen} onOpenChange={setIsAddPartnerOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm">
+                <Truck className="h-4 w-4 mr-2" /> Add New Partner
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl bg-white border border-slate-200 shadow-2xl rounded-2xl p-0 overflow-hidden">
+              <DialogHeader className="px-8 py-6 border-b bg-slate-50/50">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                    <Truck className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <DialogTitle className="text-xl font-bold text-slate-900">Add New Delivery Partner</DialogTitle>
+                    <DialogDescription className="text-xs text-slate-500">
+                      Register a logistics driver to assign farm-to-consumer delivery orders.
+                    </DialogDescription>
+                  </div>
+                </div>
+              </DialogHeader>
+
+              <form onSubmit={handleAddPartnerSubmit} className="p-8 space-y-6 max-h-[75vh] overflow-y-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-700">Full Name *</Label>
+                    <Input 
+                      placeholder="e.g. Rahul Sharma"
+                      value={newPartner.name}
+                      onChange={e => setNewPartner(prev => ({ ...prev, name: e.target.value }))}
+                      required
+                      className="h-10 text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-700">Phone Number *</Label>
+                    <Input 
+                      placeholder="e.g. +91 98765 43210"
+                      value={newPartner.phone}
+                      onChange={e => setNewPartner(prev => ({ ...prev, phone: e.target.value }))}
+                      required
+                      className="h-10 text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-700">Email Address</Label>
+                    <Input 
+                      type="email"
+                      placeholder="e.g. rahul.delivery@kisanmart.com"
+                      value={newPartner.email}
+                      onChange={e => setNewPartner(prev => ({ ...prev, email: e.target.value }))}
+                      className="h-10 text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-700">Operating City / Hub</Label>
+                    <Input 
+                      placeholder="e.g. Pune / Nashik"
+                      value={newPartner.city}
+                      onChange={e => setNewPartner(prev => ({ ...prev, city: e.target.value }))}
+                      className="h-10 text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-700">Vehicle Type</Label>
+                    <Select 
+                      value={newPartner.vehicleType} 
+                      onValueChange={val => setNewPartner(prev => ({ ...prev, vehicleType: val }))}
+                    >
+                      <SelectTrigger className="h-10 text-sm">
+                        <SelectValue placeholder="Select vehicle type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Mini Truck (TATA Ace)">Mini Truck (TATA Ace)</SelectItem>
+                        <SelectItem value="Pickup Truck (Bolero)">Pickup Truck (Bolero)</SelectItem>
+                        <SelectItem value="3-Wheeler Auto / Cargo">3-Wheeler Auto / Cargo</SelectItem>
+                        <SelectItem value="Bike / Motorcycle">Bike / Motorcycle</SelectItem>
+                        <SelectItem value="Electric Van / Rickshaw">Electric Van / Rickshaw</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-700">Vehicle Number</Label>
+                    <Input 
+                      placeholder="e.g. MH-12-AB-9876"
+                      value={newPartner.vehicleNumber}
+                      onChange={e => setNewPartner(prev => ({ ...prev, vehicleNumber: e.target.value.toUpperCase() }))}
+                      className="h-10 text-sm font-mono uppercase"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-700">Driving License Number</Label>
+                    <Input 
+                      placeholder="e.g. DL-1420110012345"
+                      value={newPartner.licenseNumber}
+                      onChange={e => setNewPartner(prev => ({ ...prev, licenseNumber: e.target.value.toUpperCase() }))}
+                      className="h-10 text-sm font-mono uppercase"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-700">Initial Wallet Balance (₹)</Label>
+                    <Input 
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      value={newPartner.walletBalance}
+                      onChange={e => setNewPartner(prev => ({ ...prev, walletBalance: Number(e.target.value) }))}
+                      className="h-10 text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-700">KYC Status</Label>
+                    <Select 
+                      value={newPartner.kycStatus} 
+                      onValueChange={val => setNewPartner(prev => ({ ...prev, kycStatus: val }))}
+                    >
+                      <SelectTrigger className="h-10 text-sm">
+                        <SelectValue placeholder="KYC status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="approved">Approved (Pre-verified)</SelectItem>
+                        <SelectItem value="pending">Pending Document Review</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-slate-700">Account Status</Label>
+                    <Select 
+                      value={newPartner.status} 
+                      onValueChange={val => setNewPartner(prev => ({ ...prev, status: val }))}
+                    >
+                      <SelectTrigger className="h-10 text-sm">
+                        <SelectValue placeholder="Account status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active (Ready for deliveries)</SelectItem>
+                        <SelectItem value="suspended">Suspended / Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <DialogFooter className="pt-4 border-t gap-2">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => setIsAddPartnerOpen(false)}
+                    className="border-slate-200 text-slate-600 font-semibold"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    type="submit" 
+                    disabled={isAdding}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+                  >
+                    {isAdding ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Adding Partner...
+                      </>
+                    ) : (
+                      <>
+                        <Truck className="h-4 w-4 mr-2" /> Register Partner
+                      </>
+                    )}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
