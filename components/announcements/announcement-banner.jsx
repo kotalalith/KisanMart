@@ -36,12 +36,10 @@ export function AnnouncementBanner({ role = 'buyer' }) {
     }
   }, [])
 
-  // 1. Listen to published banner announcements
+  // 1. Listen to published banner announcements (in-memory filtering avoids composite index requirement)
   useEffect(() => {
     const q = query(
       collection(db, "announcements"),
-      where("status", "==", "published"),
-      where("displayType", "==", "banner"),
       orderBy("createdAt", "desc")
     )
 
@@ -58,6 +56,10 @@ export function AnnouncementBanner({ role = 'buyer' }) {
           }
         })
         .filter(item => {
+          // Filter by status & displayType
+          if (item.status && item.status !== 'published') return false
+          if (item.displayType && item.displayType !== 'banner') return false
+
           // Filter by audience
           const matchesAudience = item.targetAudience === 'all' || item.targetAudience === role
           if (!matchesAudience) return false
@@ -73,6 +75,8 @@ export function AnnouncementBanner({ role = 'buyer' }) {
         })
 
       setAnnouncements(list)
+    }, (error) => {
+      console.warn("Announcement banner Firestore sync notice:", error.message)
     })
 
     return () => unsubscribe()

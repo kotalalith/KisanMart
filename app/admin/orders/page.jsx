@@ -73,8 +73,8 @@ function AdminOrdersContent() {
     )
   }, [orders, searchQuery])
 
-  const pendingOrders = orders.filter((o) => o.status === "pending")
-  const shippedOrders = orders.filter((o) => o.status === "shipped")
+  const pendingOrders = orders.filter((o) => o.status === "pending" || o.status === "placed" || o.status === "accepted" || o.status === "confirmed")
+  const shippedOrders = orders.filter((o) => o.status === "shipped" || o.status === "picked_up" || o.status === "assigned")
   const deliveredOrders = orders.filter((o) => o.status === "delivered")
   const cancelledOrders = orders.filter((o) => o.status === "cancelled")
 

@@ -44,12 +44,10 @@ export function AnnouncementPopup({ role = 'buyer' }) {
     }
   }, [])
 
-  // Listen to active popup announcements
+  // Listen to active popup announcements (in-memory filtering avoids composite index requirement)
   useEffect(() => {
     const q = query(
       collection(db, "announcements"),
-      where("status", "==", "published"),
-      where("displayType", "==", "popup"),
       orderBy("createdAt", "desc")
     )
 
@@ -66,6 +64,10 @@ export function AnnouncementPopup({ role = 'buyer' }) {
           }
         })
         .filter(item => {
+          // Check status & displayType
+          if (item.status && item.status !== 'published') return false
+          if (item.displayType && item.displayType !== 'popup') return false
+
           // Check audience targeting
           const matchesAudience = item.targetAudience === 'all' || item.targetAudience === role
           if (!matchesAudience) return false
@@ -87,6 +89,8 @@ export function AnnouncementPopup({ role = 'buyer' }) {
         setActiveAnnouncement(null)
         setIsOpen(false)
       }
+    }, (error) => {
+      console.warn("Announcement popup Firestore sync notice:", error.message)
     })
 
     return () => unsubscribe()

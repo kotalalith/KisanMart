@@ -29,6 +29,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { useOrders } from '@/lib/order-context'
+import { useSellers } from '@/lib/seller-context'
 import { useAdminUsers } from '@/lib/admin-users-context'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
@@ -50,16 +51,17 @@ const statusConfig = {
 
 export default function OrdersPage() {
   const { orders, updateOrderStatus, acceptOrder, assignDeliveryBoy } = useOrders()
+  const { currentSeller } = useSellers()
   const { users } = useAdminUsers()
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [selectedBoy, setSelectedBoy] = useState('')
 
-
-  // Demo seller ID
-  const sellerId = 'seller-1'
+  const sellerId = currentSeller?.id || 'seller-1'
   const sellerOrders = orders.filter(o => 
-    o.items?.some(item => item.sellerId === sellerId)
+    o.sellerId === sellerId ||
+    o.items?.some(item => item.sellerId === sellerId) ||
+    (!o.sellerId && (!o.items || o.items.length === 0 || o.items.some(item => !item.sellerId || item.sellerId === 'seller-1' || item.sellerId === sellerId)))
   )
 
   const filteredOrders = sellerOrders.filter((order) => {

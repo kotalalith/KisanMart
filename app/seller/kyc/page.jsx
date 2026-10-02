@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { useSellers, SELLER_TYPES } from '@/lib/seller-context'
 import { categories } from '@/lib/mock-data'
+import { toast } from 'sonner'
 
 const statusConfig = {
   pending: { label: 'Pending Review', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
@@ -115,10 +116,10 @@ export default function KYCPage() {
         pendingCategories: categoriesToRequest
       })
       setIsEditing(false)
-      alert('KYC details and documents submitted successfully! Waiting for admin approval.')
+      toast.success('KYC details and documents submitted successfully! Waiting for admin approval.')
     } catch (error) {
       console.error("KYC submission error:", error)
-      alert('Failed to submit KYC details.')
+      toast.error('Failed to submit KYC details.')
     } finally {
       setIsSubmitting(false)
     }

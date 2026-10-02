@@ -46,10 +46,9 @@ export default function AnnouncementsFeed() {
   const [selectedTab, setSelectedTab] = useState('all')
 
   useEffect(() => {
-    // Sync published announcements for feed display
+    // Sync published announcements for feed display (in-memory filtering avoids composite index requirement)
     const q = query(
       collection(db, "announcements"),
-      where("status", "==", "published"),
       orderBy("createdAt", "desc")
     )
 
@@ -67,6 +66,9 @@ export default function AnnouncementsFeed() {
           }
         })
         .filter(item => {
+          // Check status is published
+          if (item.status && item.status !== 'published') return false
+
           // Check targets (buyers or all)
           const matchesAudience = item.targetAudience === 'all' || item.targetAudience === 'buyer'
           if (!matchesAudience) return false
@@ -79,6 +81,8 @@ export default function AnnouncementsFeed() {
         })
 
       setAnnouncements(list)
+    }, (error) => {
+      console.warn("Announcements Firestore sync notice:", error.message)
     })
 
     return () => unsubscribe()

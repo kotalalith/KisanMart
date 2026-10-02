@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { MapPin, Navigation, Search, Check, AlertTriangle, Loader2, Home, Briefcase, Warehouse, Compass, RotateCcw, Clock } from 'lucide-react'
 import { useLocation } from '@/lib/location-context'
 import { useUser } from '@/lib/user-context'
@@ -10,6 +11,10 @@ import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
 export function LocationModal({ isOpen, onClose }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
   const { 
     fullLocationDetails, 
     setManualLocationDetail, 
@@ -163,30 +168,126 @@ export function LocationModal({ isOpen, onClose }) {
     }
   }, [isOpen, fullLocationDetails])
 
-  // GPS detection trigger
+  const POPULAR_CITIES = [
+    { name: 'Guntur / Amaravati', state: 'Andhra Pradesh', lat: 16.3067, lng: 80.4365, pincode: '522002' },
+    { name: 'Vijayawada', state: 'Andhra Pradesh', lat: 16.5062, lng: 80.6480, pincode: '520001' },
+    { name: 'Hyderabad', state: 'Telangana', lat: 17.3850, lng: 78.4867, pincode: '500001' },
+    { name: 'Pune', state: 'Maharashtra', lat: 18.5204, lng: 73.8567, pincode: '411001' },
+    { name: 'Mumbai', state: 'Maharashtra', lat: 19.0760, lng: 72.8777, pincode: '400001' },
+    { name: 'Bengaluru', state: 'Karnataka', lat: 12.9716, lng: 77.5946, pincode: '560001' },
+    { name: 'Delhi NCR', state: 'Delhi', lat: 28.6139, lng: 77.2090, pincode: '110001' },
+    { name: 'Nashik', state: 'Maharashtra', lat: 19.9975, lng: 73.7898, pincode: '422001' }
+  ]
+
+  const handleSelectCity = (c) => {
+    const detail = {
+      village: c.name + ' Central',
+      city: c.name,
+      district: c.name,
+      state: c.state,
+      pincode: c.pincode,
+      lat: c.lat,
+      lng: c.lng
+    }
+    setManualLocationDetail(detail)
+    saveToRecentLocations(detail)
+    onClose()
+  }
+
+  // Network / IP detection (Instant, no browser permission needed)
+  const handleIPDetect = async () => {
+    setGpsStep('detecting')
+    setGpsError('')
+    try {
+      const response = await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client')
+      if (response.ok) {
+        const data = await response.json()
+        const latitude = parseFloat(data.latitude) || 16.3067
+        const longitude = parseFloat(data.longitude) || 80.4365
+        const details = {
+          village: data.locality || data.city || 'Local Area',
+          city: data.city || data.locality || data.principalSubdivision || 'Guntur',
+          district: data.localityInfo?.administrative?.find(a => a.order === 5)?.name || data.city || '',
+          state: data.principalSubdivision || 'India',
+          pincode: data.postcode || '',
+          lat: latitude,
+          lng: longitude
+        }
+        setGpsDetail(details)
+        setGpsStep('success')
+        return
+      }
+    } catch (e) {
+      console.warn("IP detect primary failed, trying secondary...")
+    }
+
+    try {
+      const response = await fetch('https://freeipapi.com/api/json')
+      if (response.ok) {
+        const data = await response.json()
+        const latitude = parseFloat(data.latitude) || 18.5204
+        const longitude = parseFloat(data.longitude) || 73.8567
+        const details = {
+          village: data.cityName || 'City Area',
+          city: data.cityName || 'Pune',
+          district: data.regionName || '',
+          state: data.regionName || 'India',
+          pincode: data.zipCode || '',
+          lat: latitude,
+          lng: longitude
+        }
+        setGpsDetail(details)
+        setGpsStep('success')
+        return
+      }
+    } catch (e) {}
+
+    const details = {
+      village: 'City Hub',
+      city: 'Pune',
+      district: 'Pune District',
+      state: 'Maharashtra',
+      pincode: '411028',
+      lat: 18.5204,
+      lng: 73.8567
+    }
+    setGpsDetail(details)
+    setGpsStep('success')
+  }
+
+  // GPS detection trigger with automatic IP fallback
   const handleGPSDetect = () => {
     setGpsStep('detecting')
     setGpsError('')
     
     if (!navigator.geolocation) {
-      setGpsStep('error')
-      setGpsError('Geolocation is not supported by your browser.')
+      handleIPDetect()
       return
     }
 
+    let finished = false
+    const timeoutId = setTimeout(() => {
+      if (!finished) {
+        finished = true
+        handleIPDetect()
+      }
+    }, 4000)
+
     navigator.geolocation.getCurrentPosition(
       async (position) => {
+        if (finished) return
+        finished = true
+        clearTimeout(timeoutId)
         setGpsStep('geocoding')
         const { latitude, longitude } = position.coords
         try {
-          // Fetch reverse geocoded details
           const response = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`)
           if (!response.ok) throw new Error("API response not ok")
           const data = await response.json()
           
           const details = {
-            village: data.locality || 'Green Fields',
-            city: data.city || 'Local Area',
+            village: data.locality || data.city || 'Local Area',
+            city: data.city || data.locality || data.principalSubdivision || 'Guntur',
             district: data.localityInfo?.administrative?.find(a => a.order === 5)?.name || data.city || '',
             state: data.principalSubdivision || 'India',
             pincode: data.postcode || '',
@@ -197,50 +298,17 @@ export function LocationModal({ isOpen, onClose }) {
           setGpsDetail(details)
           setGpsStep('success')
         } catch (e) {
-          // Fallback reverse geocoding using OSM
-          try {
-            const osmResp = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`)
-            if (osmResp.ok) {
-              const osmData = await osmResp.json()
-              const addr = osmData.address
-              const details = {
-                village: addr.village || addr.suburb || addr.neighbourhood || addr.road || 'Farm Region',
-                city: addr.city || addr.town || 'District Center',
-                district: addr.state_district || '',
-                state: addr.state || '',
-                pincode: addr.postcode || '',
-                lat: latitude,
-                lng: longitude
-              }
-              setGpsDetail(details)
-              setGpsStep('success')
-              return
-            }
-          } catch (err) {}
-
-          // Hard fallback coordinates
-          const details = {
-            village: 'Detected Location',
-            city: data.city || 'India',
-            district: '',
-            state: data.principalSubdivision || '',
-            pincode: data.postcode || '',
-            lat: latitude,
-            lng: longitude
-          }
-          setGpsDetail(details)
-          setGpsStep('success')
+          handleIPDetect()
         }
       },
       (error) => {
-        setGpsStep('error')
-        if (error.code === 1) {
-          setGpsError('Location permission denied. Please allow location access in your browser or enter pincode manually.')
-        } else {
-          setGpsError('Could not retrieve GPS coordinates. Please select manual entry.')
-        }
+        if (finished) return
+        finished = true
+        clearTimeout(timeoutId)
+        // If GPS is denied or fails on desktop, seamlessly fall back to IP geolocation
+        handleIPDetect()
       },
-      { timeout: 7000, enableHighAccuracy: true }
+      { timeout: 3500, enableHighAccuracy: false, maximumAge: 60000 }
     )
   }
 
@@ -358,101 +426,128 @@ export function LocationModal({ isOpen, onClose }) {
                     activeTab === 'manual' && manualForm.lng ? parseFloat(manualForm.lng) :
                     fullLocationDetails.lng || 73.8567
 
-  if (!isOpen) return null
+  if (!isOpen || !mounted) return null
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4 animate-in fade-in duration-300">
-      <div className="w-full max-w-xl bg-white rounded-[2rem] shadow-2xl border border-slate-100 flex flex-col overflow-hidden animate-in zoom-in-95 duration-300 max-h-[90vh]">
+  return createPortal(
+    <div 
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-3 sm:p-4 animate-in fade-in duration-200"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-100 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200 max-h-[88vh]">
         
-        {/* Top Header Map Preview */}
-        <div className="w-full bg-slate-100 relative h-[160px] shrink-0 border-b border-slate-200">
-          <div className="absolute top-4 left-4 z-10 bg-white/90 backdrop-blur-md rounded-xl p-2.5 border border-slate-200 text-xs space-y-1 shadow-lg max-w-[280px]">
-            <p className="font-black text-emerald-600 uppercase tracking-widest text-[9px]">Location Preview</p>
-            <p className="font-extrabold text-slate-900 truncate">{activeTab === 'gps' && gpsDetail ? gpsDetail.village : fullLocationDetails.village || 'Pune Area'}</p>
+        {/* Sticky Modal Header */}
+        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-slate-100 bg-white shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 shrink-0">
+              <MapPin className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-base sm:text-lg font-extrabold text-slate-900 tracking-tight">Select Delivery Location</h2>
+              <p className="text-slate-400 font-medium text-xs">
+                {fullLocationDetails.city ? `Currently: ${fullLocationDetails.city}` : 'Choose your location for orders'}
+              </p>
+            </div>
           </div>
           <button 
-             onClick={onClose} 
-             className="absolute top-4 right-4 z-10 bg-white/90 hover:bg-white text-slate-600 hover:text-slate-900 w-8 h-8 flex items-center justify-center rounded-full shadow-lg border border-slate-200 transition-all font-bold"
+            type="button"
+            onClick={onClose} 
+            className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-colors font-bold text-sm shrink-0"
+            aria-label="Close"
           >
-             ✕
+            ✕
           </button>
-
-          {/* OSM Iframe Embed */}
-          <iframe 
-            title="Location Selection Map"
-            src={`https://www.openstreetmap.org/export/embed.html?bbox=${activeLng - 0.015}%2C${activeLat - 0.015}%2C${activeLng + 0.015}%2C${activeLat + 0.015}&layer=mapnik&marker=${activeLat}%2C${activeLng}`}
-            className="w-full h-full border-none pointer-events-none"
-            loading="lazy"
-          />
         </div>
 
-        {/* Main Content Area */}
-        <div className="flex-1 p-6 md:p-8 overflow-y-auto space-y-6 flex flex-col">
-          <div className="shrink-0">
-            <h2 className="text-2xl font-black text-slate-950 tracking-tight flex items-center gap-2">
-              <MapPin className="text-emerald-600 h-6 w-6" />
-              Select Delivery Location
-            </h2>
-            <p className="text-slate-500 font-medium text-xs sm:text-sm mt-1">Configure your location for real-time delivery estimation</p>
-          </div>
+        {/* Navigation Tabs */}
+        <div className="flex px-4 sm:px-5 pt-3 border-b border-slate-100 bg-slate-50/50 gap-1.5 overflow-x-auto shrink-0">
+          {[
+            { id: 'gps', label: 'Auto-Detect / GPS', icon: Navigation },
+            { id: 'cities', label: 'Popular Cities', icon: MapPin },
+            { id: 'pincode', label: 'Pincode Lookup', icon: Search },
+            { id: 'saved', label: 'Saved Addresses', icon: Home }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-lg transition-all border-b-2 shrink-0 pb-2.5",
+                activeTab === tab.id 
+                  ? "border-emerald-600 bg-white text-emerald-800 shadow-sm" 
+                  : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-white/60"
+              )}
+            >
+              <tab.icon className="h-3.5 w-3.5" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-          {/* Navigation Tabs */}
-          <div className="flex overflow-x-auto border-b border-slate-100 pb-2 gap-1 scrollbar-thin scrollbar-thumb-slate-200">
-            {[
-              { id: 'gps', label: 'GPS Location', icon: Navigation },
-              { id: 'pincode', label: 'Pincode Lookup', icon: Search },
-              { id: 'saved', label: 'Saved Addresses', icon: Home }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "flex items-center gap-2 px-3 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all border-b-2 shrink-0",
-                  activeTab === tab.id 
-                    ? "border-emerald-600 bg-emerald-50/40 text-emerald-800" 
-                    : "border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50"
-                )}
-              >
-                <tab.icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            ))}
-          </div>
+        {/* Tab Content Panels */}
+        <div className="flex-1 p-5 sm:p-6 overflow-y-auto flex flex-col">
+          
+          {/* CITIES PANEL */}
+          {activeTab === 'cities' && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-slate-800">Active Delivery Regions</h4>
+                <p className="text-xs text-slate-500">Click any city below to set your location immediately:</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
+                {POPULAR_CITIES.map((c) => (
+                  <button
+                    key={c.name}
+                    type="button"
+                    onClick={() => handleSelectCity(c)}
+                    className="p-3 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/40 bg-white transition-all text-left flex items-start gap-2.5 group shadow-sm"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white flex items-center justify-center shrink-0 transition-colors mt-0.5">
+                      <MapPin className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-xs text-slate-800 group-hover:text-emerald-900 truncate">{c.name}</p>
+                      <p className="text-[11px] text-slate-400 font-medium">{c.state}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
-          {/* Tab Content Panels */}
-          <div className="flex-1 flex flex-col">
-            
-            {/* GPS PANEL */}
-            {activeTab === 'gps' && (
-              <div className="space-y-6 flex-1 flex flex-col justify-center py-4">
-                {gpsStep === 'idle' && (
-                  <div className="text-center space-y-4 py-8">
-                    <div className="mx-auto w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 border border-emerald-100 animate-pulse">
-                      <Navigation className="h-8 w-8" />
-                    </div>
-                    <div className="space-y-1">
-                      <h4 className="text-lg font-bold text-slate-800">GPS Location Detection</h4>
-                      <p className="text-slate-400 text-sm max-w-sm mx-auto">Allow device location permission to pinpoint your delivery coordinates automatically.</p>
-                    </div>
-                    <div className="flex flex-col gap-2 max-w-xs mx-auto">
-                      <Button 
-                        onClick={handleGPSDetect} 
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-black h-12 rounded-xl shadow-lg shadow-emerald-600/10 flex items-center justify-center gap-2 w-full animate-bounce"
-                      >
-                        <Navigation className="h-4 w-4" />
-                        Use Current GPS Location
-                      </Button>
-                      <Button 
-                        variant="outline"
-                        onClick={handleGPSDetect} 
-                        className="text-slate-700 border-slate-200 font-bold h-11 rounded-xl w-full"
-                      >
-                        Detect Automatically
-                      </Button>
-                    </div>
+          {/* GPS PANEL */}
+          {activeTab === 'gps' && (
+            <div className="space-y-5 flex-1 flex flex-col justify-center py-2">
+              {gpsStep === 'idle' && (
+                <div className="text-center space-y-4 py-4">
+                  <div className="mx-auto w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 border border-emerald-100">
+                    <Navigation className="h-7 w-7" />
                   </div>
-                )}
+                  <div className="space-y-1">
+                    <h4 className="text-base font-bold text-slate-800">Instant Location Detection</h4>
+                    <p className="text-slate-500 text-xs max-w-sm mx-auto leading-relaxed">
+                      Detect your delivery location automatically using network IP or your browser GPS.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2.5 max-w-xs mx-auto pt-2">
+                    <Button 
+                      type="button"
+                      onClick={handleIPDetect} 
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 rounded-xl shadow-md shadow-emerald-600/10 flex items-center justify-center gap-2 w-full text-xs"
+                    >
+                      <Navigation className="h-4 w-4" />
+                      Auto-Detect Automatically (Instant)
+                    </Button>
+                    <Button 
+                      type="button"
+                      variant="outline"
+                      onClick={handleGPSDetect} 
+                      className="text-slate-700 border-slate-200 hover:bg-slate-50 font-bold h-10 rounded-xl w-full text-xs"
+                    >
+                      Use Device GPS Location
+                    </Button>
+                  </div>
+                </div>
+              )}
 
                 {(gpsStep === 'detecting' || gpsStep === 'geocoding') && (
                   <div className="text-center space-y-4 py-10">
@@ -862,10 +957,9 @@ export function LocationModal({ isOpen, onClose }) {
               </form>
             )}
 
-          </div>
         </div>
-
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

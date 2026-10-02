@@ -52,6 +52,7 @@ const menuItems = [
   { title: "Announcements", icon: Volume2, href: "/admin/announcements" },
   { title: "Referrals", icon: Gift, href: "/admin/referrals" },
   { title: "Reports", icon: FileBarChart, href: "/admin/reports" },
+  { title: "Support Desk", icon: Megaphone, href: "/admin/support" },
 ]
 
 
@@ -74,7 +75,7 @@ export function AdminSidebar() {
         </Link>
       </SidebarHeader>
 
-      <SidebarContent>
+      <SidebarContent className="[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         <SidebarGroup>
           <SidebarGroupLabel>Platform Management</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -94,7 +95,7 @@ export function AdminSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>System</SidebarGroupLabel>
+          <SidebarGroupLabel>System & Config</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
@@ -102,6 +103,14 @@ export function AdminSidebar() {
                   <Link href="/admin/settings">
                     <Settings className="h-4 w-4" />
                     <span>Settings</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild isActive={pathname === "/admin/setup-firebase"}>
+                  <Link href="/admin/setup-firebase">
+                    <Landmark className="h-4 w-4" />
+                    <span>Setup Database</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

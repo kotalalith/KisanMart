@@ -38,9 +38,36 @@ export const SELLER_TYPES = {
   }
 }
 
+export const DEFAULT_SAMPLE_SELLER = {
+  id: 'seller-1',
+  name: 'Ramesh Patil',
+  businessName: 'Green Harvest Organics',
+  ownerName: 'Ramesh Patil',
+  email: 'ramesh.farmer@agrobridge.com',
+  phone: '+91 98234 56789',
+  location: 'Pune Rural, Maharashtra',
+  status: 'active',
+  kycStatus: 'verified',
+  kycProgress: 100,
+  sellerType: 'farmer',
+  totalSales: 185000,
+  approvedCategories: ['cat-1', 'cat-2', 'cat-3', 'cat-4'],
+  pendingCategories: ['cat-7'],
+  restrictedCategories: [],
+  panNumber: 'ABCDE1234F',
+  gstNumber: '27ABCDE1234F1Z5',
+  bankDetails: {
+    accountHolder: 'Ramesh Patil',
+    bankName: 'State Bank of India',
+    accountNumber: '38920194829',
+    ifscCode: 'SBIN0001234',
+    branchName: 'Pune Agricultural Branch'
+  }
+}
+
 export function SellerProvider({ children }) {
-  const [sellers, setSellers] = useState([]) 
-  const [loading, setLoading] = useState(true)
+  const [sellers, setSellers] = useState([DEFAULT_SAMPLE_SELLER]) 
+  const [loading, setLoading] = useState(false)
   const [currentSellerId, setCurrentSellerId] = useState('seller-1') 
   const { sendMultiChannelNotification } = useNotifications()
 
@@ -49,23 +76,26 @@ export function SellerProvider({ children }) {
     const q = query(collection(db, "sellers"), orderBy("businessName", "asc"));
     const unsubscribe = onSnapshot(q, 
       (snapshot) => {
-        const sellerList = snapshot.docs.map(doc => {
-          const data = doc.data()
-          return {
-            id: doc.id,
-            ...data,
-            // Fallback for existing mock data
-            sellerType: data.sellerType || 'general',
-            approvedCategories: data.approvedCategories || ['cat-1', 'cat-2', 'cat-3', 'cat-4', 'cat-5', 'cat-6', 'cat-7', 'cat-8'],
-            pendingCategories: data.pendingCategories || [],
-            restrictedCategories: data.restrictedCategories || []
-          }
-        });
-        setSellers(sellerList);
+        if (!snapshot.empty) {
+          const sellerList = snapshot.docs.map(doc => {
+            const data = doc.data()
+            return {
+              id: doc.id,
+              ...data,
+              sellerType: data.sellerType || 'general',
+              approvedCategories: data.approvedCategories || ['cat-1', 'cat-2', 'cat-3', 'cat-4', 'cat-5', 'cat-6', 'cat-7', 'cat-8'],
+              pendingCategories: data.pendingCategories || [],
+              restrictedCategories: data.restrictedCategories || []
+            }
+          });
+          setSellers(sellerList);
+        } else {
+          setSellers([DEFAULT_SAMPLE_SELLER]);
+        }
         setLoading(false);
       },
       (error) => {
-        console.error("Sellers sync error:", error);
+        console.warn("Sellers Firestore sync error (using local fallback):", error);
         setLoading(false);
       }
     );
@@ -76,10 +106,23 @@ export function SellerProvider({ children }) {
   const currentSeller = useMemo(() => {
     const found = sellers.find(s => s.id === currentSellerId)
     if (found) return found
-    return sellers[0] || null
+    return sellers[0] || DEFAULT_SAMPLE_SELLER
   }, [sellers, currentSellerId])
 
   const updateSellerKYC = useCallback(async (sellerId, updates) => {
+    // 1. Optimistic update to local state so Seller and Admin see changes immediately
+    setSellers(prev => prev.map(s => {
+      if (s.id === sellerId) {
+        return {
+          ...s,
+          ...updates,
+          updatedAt: new Date().toISOString()
+        }
+      }
+      return s
+    }))
+
+    // 2. Persist to Firestore if available
     try {
       const sellerRef = doc(db, "sellers", sellerId);
       await updateDoc(sellerRef, {
@@ -87,7 +130,7 @@ export function SellerProvider({ children }) {
         updatedAt: serverTimestamp()
       });
     } catch (error) {
-      console.error("Error updating seller:", error);
+      console.warn("Firestore seller update warning (local state updated):", error.message);
     }
   }, [])
 

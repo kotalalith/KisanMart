@@ -49,133 +49,139 @@ export function LocationGateOverlay() {
     return null
   }
 
-  const handleSubmit = (e) => {
-    e.preventDefault()
-    setIsLoading(true)
-    
-    // Simulate API call
-    setTimeout(() => {
-      addToWaitlist({
-        name,
-        phone,
-        city_detected: detectedCity || 'Unknown Area'
-      })
-      setIsLoading(false)
-      setSubmitted(true)
-    }, 1500)
+  const handlePickCity = (cityName, lat, lng) => {
+    const detail = {
+      village: cityName + ' Central',
+      city: cityName,
+      district: cityName,
+      state: 'Active Hub',
+      pincode: '',
+      lat,
+      lng
+    }
+    setManualLocation({
+      id: `zone-${cityName.toLowerCase().replace(/\s+/g, '')}`,
+      city_name: cityName,
+      center_lat: lat,
+      center_lng: lng,
+      radius_km: 50,
+      is_active: true
+    })
+    setShowPopup(false)
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/40 backdrop-blur-md px-4 py-8 overflow-y-auto animate-in fade-in duration-700">
-      <div className="w-full max-w-md mx-auto bg-slate-900 border border-white/10 p-6 md:p-8 rounded-[2rem] shadow-2xl relative overflow-hidden animate-in zoom-in-95 slide-in-from-bottom-10 duration-500 delay-150">
-        {/* Decorative elements */}
-        <div className="absolute -top-24 -right-24 h-64 w-64 bg-emerald-500/10 rounded-full blur-[80px]" />
-        
-        <div className="relative z-10 text-center space-y-6">
-          <div className="mx-auto w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center mb-4 border border-emerald-500/20">
-            <MapPin className="h-6 w-6 text-emerald-500 animate-bounce" />
-          </div>
-          
-          <div className="space-y-2">
-            <h2 className="text-2xl font-bold tracking-tight text-white">
-              Service Not Available Yet
-            </h2>
-            <p className="text-sm text-slate-300 max-w-sm mx-auto leading-relaxed">
-              AgroBridge normal delivery is not active in <span className="text-orange-300 font-semibold">{detectedCity || "your area"}</span>.
-            </p>
-          </div>
-
-          <div className="py-2">
-            <button 
+    <>
+      {showPopup && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 backdrop-blur-md px-4 py-8 overflow-y-auto animate-in fade-in duration-300">
+          <div className="w-full max-w-md mx-auto bg-slate-900 border border-white/10 p-6 md:p-8 rounded-[2rem] shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-300">
+            {/* Close button */}
+            <button
               type="button"
-              onClick={() => setIsLocationModalOpen(true)}
-              className="w-full h-12 bg-white/5 border border-white/10 hover:bg-white/10 hover:border-emerald-500/50 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all shadow-sm"
+              onClick={() => setShowPopup(false)}
+              className="absolute top-4 right-4 z-20 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold transition-colors"
+              aria-label="Dismiss"
             >
-              <MapPin className="h-4 w-4 text-emerald-400" />
-              Enter Pincode or Select on Map
+              ✕
             </button>
-          </div>
 
-          <p className="text-slate-400 text-xs max-w-sm mx-auto">
-            Product ordering and checkout are blocked for this location. Please select a serviceable location or join the waitlist.
-          </p>
+            {/* Decorative element */}
+            <div className="absolute -top-24 -right-24 h-64 w-64 bg-emerald-500/10 rounded-full blur-[80px]" />
+            
+            <div className="relative z-10 text-center space-y-5">
+              <div className="mx-auto w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center border border-emerald-500/20">
+                <MapPin className="h-6 w-6 text-emerald-400" />
+              </div>
+              
+              <div className="space-y-1.5">
+                <h2 className="text-xl font-bold tracking-tight text-white">
+                  Limited Service Area
+                </h2>
+                <p className="text-xs text-slate-300 max-w-sm mx-auto leading-relaxed">
+                  Fast farm delivery is active in select cities. Detected: <span className="text-emerald-400 font-semibold">{detectedCity || "your area"}</span>.
+                </p>
+              </div>
 
-          <div className="py-2">
-            {submitted ? (
-              <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-2xl p-8 space-y-4 animate-in zoom-in-95 duration-500">
-                <div className="h-12 w-12 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto">
-                  <CheckCircle2 className="h-6 w-6 text-emerald-500" />
-                </div>
-                <div className="space-y-1">
-                  <h3 className="text-xl font-bold text-white">You're on the list!</h3>
-                  <p className="text-slate-400 text-sm">
-                    We'll notify you via SMS as soon as we launch here.
-                  </p>
+              {/* Quick Hub Selector */}
+              <div className="space-y-2 pt-1 text-left">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">
+                  Or switch to an active delivery hub:
+                </p>
+                <div className="flex flex-wrap gap-1.5 justify-center">
+                  {[
+                    { name: 'Guntur', lat: 16.3067, lng: 80.4365 },
+                    { name: 'Vijayawada', lat: 16.5062, lng: 80.6480 },
+                    { name: 'Hyderabad', lat: 17.3850, lng: 78.4867 },
+                    { name: 'Pune', lat: 18.5204, lng: 73.8567 },
+                    { name: 'Bengaluru', lat: 12.9716, lng: 77.5946 },
+                    { name: 'Mumbai', lat: 19.0760, lng: 72.8777 }
+                  ].map((city) => (
+                    <button
+                      key={city.name}
+                      type="button"
+                      onClick={() => handlePickCity(city.name, city.lat, city.lng)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white/10 hover:bg-emerald-600 text-white border border-white/10 transition-colors"
+                    >
+                      {city.name}
+                    </button>
+                  ))}
                 </div>
               </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-3">
-                  <div className="relative group">
-                    <User className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500 group-focus-within:text-emerald-500 transition-colors" />
-                    <Input
-                      placeholder="Your Full Name"
-                      required
-                      className="h-12 pl-12 bg-white/5 border-white/10 text-white text-sm placeholder:text-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                    />
-                  </div>
-                  <div className="relative group">
-                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500 group-focus-within:text-emerald-500 transition-colors" />
-                    <Input
-                      placeholder="Mobile Number"
-                      type="tel"
-                      required
-                      className="h-12 pl-12 bg-white/5 border-white/10 text-white text-sm placeholder:text-slate-600 rounded-xl focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <Button 
-                  type="submit" 
-                  size="lg" 
-                  className="w-full h-12 text-base font-black rounded-xl bg-emerald-600 hover:bg-emerald-700 shadow-xl shadow-emerald-600/20 transition-all duration-300"
-                  disabled={isLoading}
-                >
-                  {isLoading ? (
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Saving...</span>
-                    </div>
-                  ) : (
-                    'GET EARLY ACCESS'
-                  )}
-                </Button>
-              </form>
-            )}
-          </div>
 
-          <div className="pt-6 space-y-4 border-t border-white/5">
-            <button 
-              className="text-slate-500 hover:text-emerald-400 gap-2 transition-colors text-xs font-bold flex items-center justify-center mx-auto"
-              onClick={() => refreshLocation()}
-            >
-              <RefreshCw className={`h-3 w-3 ${isChecking ? 'animate-spin' : ''}`} />
-              Retry Auto-Detect
-            </button>
-            
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-              <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest leading-relaxed">
-                Location is outside current delivery zones. <br/> 
-                Select an active city or retry detection.
-              </p>
+              <div className="flex flex-col gap-2 pt-2">
+                <button 
+                  type="button"
+                  onClick={() => setIsLocationModalOpen(true)}
+                  className="w-full h-11 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-2 transition-all shadow-md"
+                >
+                  <MapPin className="h-3.5 w-3.5" />
+                  Enter Pincode or Search Location
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowPopup(false)}
+                  className="w-full h-10 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-slate-300 transition-colors"
+                >
+                  Browse Marketplace Anyway
+                </button>
+              </div>
+
+              {/* Waitlist Form */}
+              <div className="pt-3 border-t border-white/10">
+                {submitted ? (
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 space-y-1">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-400 mx-auto" />
+                    <p className="text-xs font-bold text-white">You're on the early access list!</p>
+                  </div>
+                ) : (
+                  <form onSubmit={handleSubmit} className="space-y-2">
+                    <p className="text-[10px] text-slate-400 font-medium">Join waitlist for your area:</p>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Your Phone Number"
+                        type="tel"
+                        required
+                        className="h-9 bg-white/5 border-white/10 text-white text-xs placeholder:text-slate-500 rounded-lg"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                      />
+                      <Button 
+                        type="submit" 
+                        size="sm" 
+                        className="h-9 px-4 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shrink-0"
+                        disabled={isLoading}
+                      >
+                        {isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Notify Me'}
+                      </Button>
+                    </div>
+                  </form>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
       <LocationModal isOpen={isLocationModalOpen} onClose={() => setIsLocationModalOpen(false)} />
-    </div>
+    </>
   )
 }

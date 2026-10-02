@@ -57,7 +57,7 @@ export function CheckoutView() {
           } else {
             const defaultSettings = {
               radius_km: 250,
-              min_order_amount: 300,
+              min_order_amount: 50,
               delivery_fee: 50,
               free_delivery_threshold: 1000,
               pickup_lat: 18.5204,
@@ -173,6 +173,8 @@ export function CheckoutView() {
       const splitTotal = Math.max(0, splitSubtotal + splitDeliveryFee + splitTax - splitDiscount - splitWalletCredit)
 
       splitOrders.push({
+        sellerId: sellerId,
+        sellerName: sellerItems[0]?.product?.sellerName || 'Direct Farm',
         buyerId: userProfile?.id || 'guest',
         buyerName: userProfile?.name || 'Customer',
         buyerPhone: userProfile?.phone || address?.phone || '',
@@ -343,6 +345,8 @@ export function CheckoutView() {
           const splitTotal = Math.max(0, splitSubtotal + splitDeliveryFee + splitTax - splitDiscount - splitWalletCredit)
 
           splitOrders.push({
+            sellerId: sellerId,
+            sellerName: sellerItems[0]?.product?.sellerName || 'Direct Farm',
             buyerId: userProfile?.id || 'guest',
             buyerName: userProfile?.name || 'Customer',
             buyerPhone: userProfile?.phone || address?.phone || '',
@@ -549,7 +553,7 @@ export function CheckoutView() {
                 </div>
               ))}
             </RadioGroup>
-            <Button variant="outline" className="mt-4 w-full">
+            <Button variant="outline" className="mt-4 w-full" onClick={() => window.location.href = '/addresses'}>
               Add New Address
             </Button>
           </CardContent>
@@ -571,11 +575,14 @@ export function CheckoutView() {
 
                 return (
                   <div key={method.id} className="space-y-3">
-                    <div className={cn(
-                      "flex items-center gap-3 rounded-2xl border p-4 transition-all duration-300",
-                      isCodDisabled ? "opacity-50 cursor-not-allowed bg-slate-50 border-slate-200" :
-                      selectedPayment === method.id ? "border-emerald-500 bg-emerald-50/20 shadow-sm" : "hover:border-slate-300 cursor-pointer"
-                    )}>
+                    <div 
+                      onClick={() => !isCodDisabled && setSelectedPayment(method.id)}
+                      className={cn(
+                        "flex items-center gap-3 rounded-2xl border p-4 transition-all duration-300",
+                        isCodDisabled ? "opacity-50 cursor-not-allowed bg-slate-50 border-slate-200" :
+                        selectedPayment === method.id ? "border-emerald-500 bg-emerald-50/20 shadow-sm" : "hover:border-slate-300 cursor-pointer"
+                      )}
+                    >
                       <RadioGroupItem 
                         value={method.id} 
                         id={method.id} 

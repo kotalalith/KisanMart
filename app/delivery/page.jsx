@@ -60,7 +60,7 @@ export default function DeliveryDashboard() {
 
 function DeliveryDashboardContent({ uid, wallet }) {
   const router = useRouter()
-  const { orders, updateOrderStatus, getOrdersByDeliveryBoy } = useOrders()
+  const { orders, updateOrderStatus, markDelivered, getOrdersByDeliveryBoy } = useOrders()
   const { userProfile, updateProfile, switchIdentity, loading } = useUser()
   const [currentView, setCurrentView] = useState('dashboard')
   const [isWithdrawing, setIsWithdrawing] = useState(false)

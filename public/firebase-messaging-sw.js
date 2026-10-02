@@ -1,4 +1,4 @@
-﻿// public/firebase-messaging-sw.js
+// public/firebase-messaging-sw.js
 importScripts('https://www.gstatic.com/firebasejs/10.12.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.1/firebase-messaging-compat.js');
 
@@ -6,8 +6,8 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.1/firebase-messaging-com
 const params = new URL(self.location).searchParams;
 const apiKey = params.get('apiKey');
 const projectId = params.get('projectId') || 'agromarket-a0466';
-const authDomain = params.get('authDomain') || ${projectId}.firebaseapp.com;
-const storageBucket = params.get('storageBucket') || ${projectId}.firebasestorage.app;
+const authDomain = params.get('authDomain') || `${projectId}.firebaseapp.com`;
+const storageBucket = params.get('storageBucket') || `${projectId}.firebasestorage.app`;
 const messagingSenderId = params.get('messagingSenderId') || '139315316077';
 const appId = params.get('appId') || '';
 

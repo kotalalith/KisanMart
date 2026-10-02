@@ -44,7 +44,7 @@ import {
 import { Switch } from '@/components/ui/switch'
 import { useProducts } from '@/lib/product-context'
 import { useSellers } from '@/lib/seller-context'
-import { categories } from '@/lib/mock-data'
+import { useCategories } from '@/lib/category-context'
 import { toast } from 'sonner'
 
 const statusColors = {
@@ -56,6 +56,7 @@ const statusColors = {
 export default function SellerProductsPage() {
   const { products, addProduct, updateProduct, deleteProduct, loading } = useProducts()
   const { currentSeller } = useSellers()
+  const { categories } = useCategories()
   const [searchQuery, setSearchQuery] = useState('')
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
@@ -72,6 +73,22 @@ export default function SellerProductsPage() {
   const [productImages, setProductImages] = useState([])
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef(null)
+
+  const isCategoryApproved = (cat) => {
+    if (!cat) return true;
+    if (!currentSeller?.approvedCategories || currentSeller.approvedCategories.length === 0) return true;
+    if (currentSeller.approvedCategories.includes('all')) return true;
+    return currentSeller.approvedCategories.some(ap => 
+      ap === cat.id || 
+      ap.toLowerCase() === cat.name?.toLowerCase() ||
+      (ap === 'cat-1' && cat.name?.toLowerCase().includes('veg')) ||
+      (ap === 'cat-2' && cat.name?.toLowerCase().includes('fruit')) ||
+      (ap === 'cat-3' && cat.name?.toLowerCase().includes('grain')) ||
+      (ap === 'cat-4' && cat.name?.toLowerCase().includes('pulse')) ||
+      (ap === 'cat-5' && cat.name?.toLowerCase().includes('dairy')) ||
+      (ap === 'cat-6' && cat.name?.toLowerCase().includes('spice'))
+    );
+  };
 
   const addVariant = () => {
     setVariants([...variants, { id: Date.now(), label: '', price: '', stock: '', weight: '1' }])
@@ -153,7 +170,8 @@ export default function SellerProductsPage() {
       return
     }
 
-    if (currentSeller && !currentSeller.approvedCategories?.includes(category)) {
+    const selectedCat = categories.find(c => c.id === category);
+    if (!isCategoryApproved(selectedCat || { id: category, name: category })) {
       toast.error("Your account is not approved to sell products in this category.")
       return
     }
@@ -279,15 +297,19 @@ export default function SellerProductsPage() {
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
-                      {categories.filter(c => currentSeller?.approvedCategories?.includes(c.id)).length > 0 ? (
-                        categories.filter(c => currentSeller?.approvedCategories?.includes(c.id)).map((cat) => (
-                          <SelectItem key={cat.id} value={cat.id}>
-                            {cat.name}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <div className="p-4 text-sm text-muted-foreground text-center">No approved categories.</div>
-                      )}
+                      {(() => {
+                        const approvedList = categories.filter(isCategoryApproved);
+                        const displayList = (approvedList && approvedList.length > 0) ? approvedList : categories;
+                        return displayList && displayList.length > 0 ? (
+                          displayList.map((cat) => (
+                            <SelectItem key={cat.id} value={cat.id}>
+                              {cat.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <div className="p-4 text-sm text-muted-foreground text-center">No categories found.</div>
+                        );
+                      })()}
                     </SelectContent>
                   </Select>
                 </div>

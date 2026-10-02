@@ -16,11 +16,24 @@ import {
   increment
 } from 'firebase/firestore'
 
+export const DEFAULT_SAMPLE_ADDRESS = {
+  id: 'addr-default-1',
+  label: 'Home',
+  fullName: 'Aniket Sharma',
+  phone: '+91 98234 56789',
+  addressLine1: 'Flat 402, Green Meadows',
+  addressLine2: 'FC Road, Shivajinagar',
+  city: 'Pune',
+  state: 'Maharashtra',
+  pincode: '411001',
+  isDefault: true
+};
+
 const UserContext = createContext(undefined)
 
 export function UserProvider({ children }) {
   const [userProfile, setUserProfile] = useState(null)
-  const [addresses, setAddresses] = useState([])
+  const [addresses, setAddresses] = useState([DEFAULT_SAMPLE_ADDRESS])
   const [wishlist, setWishlist] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -98,7 +111,7 @@ export function UserProvider({ children }) {
           ...data,
           ...updates
         });
-        setAddresses(data.addresses || []);
+        setAddresses((data.addresses && data.addresses.length > 0) ? data.addresses : [DEFAULT_SAMPLE_ADDRESS]);
         setWishlist(data.wishlist || []);
       } else {
         // Auto-initialize for test identities starting with 'dl-', 'sel-', or 'buyer-'
@@ -112,7 +125,7 @@ export function UserProvider({ children }) {
             name: isSeller ? 'Farmer Ram' : isDelivery ? 'New Partner' : 'Valued Buyer',
             email: `${userId.replace('dl-', '')}@agrobridge.com`,
             phone: '9999999999',
-            addresses: [],
+            addresses: [DEFAULT_SAMPLE_ADDRESS],
             wishlist: [],
             role: isSeller ? 'seller' : isDelivery ? 'delivery' : 'buyer',
             status: 'active',

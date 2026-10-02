@@ -33,8 +33,19 @@ export function calculateDistance(lat1, lon1, lat2, lon2) {
   return R * c
 }
 
+export const DEFAULT_ZONES = [
+  { id: 'zone-pune', city_name: 'Pune', center_lat: 18.5204, center_lng: 73.8567, radius_km: 50, is_active: true },
+  { id: 'zone-guntur', city_name: 'Guntur / Amaravati', center_lat: 16.3067, center_lng: 80.4365, radius_km: 80, is_active: true },
+  { id: 'zone-hyderabad', city_name: 'Hyderabad', center_lat: 17.3850, center_lng: 78.4867, radius_km: 60, is_active: true },
+  { id: 'zone-mumbai', city_name: 'Mumbai', center_lat: 19.0760, center_lng: 72.8777, radius_km: 50, is_active: true },
+  { id: 'zone-bengaluru', city_name: 'Bengaluru', center_lat: 12.9716, center_lng: 77.5946, radius_km: 50, is_active: true },
+  { id: 'zone-delhi', city_name: 'Delhi NCR', center_lat: 28.6139, center_lng: 77.2090, radius_km: 60, is_active: true },
+  { id: 'zone-vijayawada', city_name: 'Vijayawada', center_lat: 16.5062, center_lng: 80.6480, radius_km: 50, is_active: true },
+  { id: 'zone-nashik', city_name: 'Nashik', center_lat: 19.9975, center_lng: 73.7898, radius_km: 50, is_active: true }
+]
+
 export function LocationProvider({ children }) {
-  const [zones, setZones] = useState([])
+  const [zones, setZones] = useState(DEFAULT_ZONES)
   const [waitlist, setWaitlist] = useState([])
   const [loading, setLoading] = useState(true)
   const [userLocation, setUserLocation] = useState(null)
@@ -58,9 +69,17 @@ export function LocationProvider({ children }) {
   // Sync Zones
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "zones"), (snapshot) => {
-      const zoneList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-      setZones(zoneList)
+      if (!snapshot.empty) {
+        const zoneList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+        setZones(zoneList)
+      } else {
+        setZones(DEFAULT_ZONES)
+      }
       setLoading(prev => waitlist.length > 0 ? false : prev)
+    }, (err) => {
+      console.warn("Firestore zones sync failed, using default zones:", err)
+      setZones(DEFAULT_ZONES)
+      setLoading(false)
     })
     return () => unsubscribe()
   }, [waitlist])
@@ -72,15 +91,18 @@ export function LocationProvider({ children }) {
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
       setWaitlist(list)
       setLoading(false)
+    }, () => {
+      setLoading(false)
     })
     return () => unsubscribe()
   }, [])
 
   const checkLocation = useCallback((lat, lng) => {
-    const allowedZone = zones.find(zone => {
-      if (!zone.is_active) return false
+    const activeZones = zones && zones.length > 0 ? zones : DEFAULT_ZONES
+    const allowedZone = activeZones.find(zone => {
+      if (zone.is_active === false) return false
       const distance = calculateDistance(lat, lng, zone.center_lat, zone.center_lng)
-      return distance <= zone.radius_km
+      return distance <= (zone.radius_km || 50)
     })
     return allowedZone ? allowedZone.city_name : null
   }, [zones])
@@ -341,27 +363,57 @@ export function LocationProvider({ children }) {
     }
 
     const fallbackIPLocation = async () => {
-      const providers = [
-        { url: 'https://ipapi.co/json/', lat: 'latitude', lng: 'longitude', city: 'city' },
-        { url: 'https://ip-api.com/json', lat: 'lat', lng: 'lon', city: 'city' },
-        { url: 'https://freeipapi.com/api/json', lat: 'latitude', lng: 'longitude', city: 'cityName' }
-      ]
-
-      for (const provider of providers) {
-        try {
-          const response = await fetch(provider.url)
-          if (!response.ok) continue
-          const data = await response.json()
-          const lat = data[provider.lat]
-          const lng = data[provider.lng]
+      // 1. Primary IP lookup: BigDataCloud (fast, accurate for Indian cities/villages, HTTPS)
+      try {
+        const resp = await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client')
+        if (resp.ok) {
+          const data = await resp.json()
+          const lat = parseFloat(data.latitude) || 16.3067
+          const lng = parseFloat(data.longitude) || 80.4365
+          const city = data.city || data.locality || data.principalSubdivision || "Guntur"
           const cityName = checkLocation(lat, lng)
-          await finalize(cityName || data[provider.city] || "Pune", !!cityName, lat, lng)
-          await writeAuditLog("IP_GEOLOCATION_SUCCESS", { provider: provider.url, lat, lng })
+          await finalize(cityName || city, true, lat, lng)
+          await writeAuditLog("IP_GEOLOCATION_SUCCESS", { provider: 'bigdatacloud', lat, lng, city })
           return
-        } catch (e) {
-          console.warn(`Provider ${provider.url} failed, trying next...`)
         }
+      } catch (e) {
+        console.warn("BigDataCloud IP detection failed, trying next provider...", e)
       }
+
+      // 2. Secondary: freeipapi.com
+      try {
+        const resp = await fetch('https://freeipapi.com/api/json')
+        if (resp.ok) {
+          const data = await resp.json()
+          const lat = parseFloat(data.latitude) || 18.5204
+          const lng = parseFloat(data.longitude) || 73.8567
+          const city = data.cityName || "Pune"
+          const cityName = checkLocation(lat, lng)
+          await finalize(cityName || city, true, lat, lng)
+          await writeAuditLog("IP_GEOLOCATION_SUCCESS", { provider: 'freeipapi', lat, lng, city })
+          return
+        }
+      } catch (e) {
+        console.warn("freeipapi failed, trying ipwho.is...", e)
+      }
+
+      // 3. Tertiary: ipwho.is
+      try {
+        const resp = await fetch('https://ipwho.is/')
+        if (resp.ok) {
+          const data = await resp.json()
+          if (data && data.success !== false) {
+            const lat = parseFloat(data.latitude) || 18.5204
+            const lng = parseFloat(data.longitude) || 73.8567
+            const city = data.city || "Pune"
+            const cityName = checkLocation(lat, lng)
+            await finalize(cityName || city, true, lat, lng)
+            await writeAuditLog("IP_GEOLOCATION_SUCCESS", { provider: 'ipwho.is', lat, lng, city })
+            return
+          }
+        }
+      } catch (e) {}
+
       // Ultimate fallback: Pune coordinates
       await finalize("Pune", true, 18.5204, 73.8567)
       await writeAuditLog("IP_GEOLOCATION_FAILED_FALLBACK_PUNE", {})
@@ -373,13 +425,19 @@ export function LocationProvider({ children }) {
       return
     }
 
+    let resolved = false
     const timeoutId = setTimeout(() => {
-      writeAuditLog("GEOLOCATION_TIMEOUT", {})
-      fallbackIPLocation()
-    }, 4500)
+      if (!resolved) {
+        resolved = true
+        writeAuditLog("GEOLOCATION_TIMEOUT", {})
+        fallbackIPLocation()
+      }
+    }, 3500)
 
     navigator.geolocation.getCurrentPosition(
       async (position) => {
+        if (resolved) return
+        resolved = true
         clearTimeout(timeoutId)
         const { latitude, longitude } = position.coords
         const cityName = checkLocation(latitude, longitude)
@@ -391,18 +449,20 @@ export function LocationProvider({ children }) {
           try {
             const resp = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`)
             const data = await resp.json()
-            await finalize(data.city || data.locality || "Pune", true, latitude, longitude)
+            await finalize(data.city || data.locality || "Local Area", true, latitude, longitude)
           } catch (e) {
-            await finalize("Pune", true, latitude, longitude)
+            await finalize("Local Area", true, latitude, longitude)
           }
         }
       },
       async (error) => {
+        if (resolved) return
+        resolved = true
         clearTimeout(timeoutId)
         await writeAuditLog("GEOLOCATION_BROWSER_DENIED", { code: error.code, message: error.message })
         await fallbackIPLocation()
       },
-      { timeout: 4000, enableHighAccuracy: true }
+      { timeout: 3000, enableHighAccuracy: false, maximumAge: 60000 }
     )
   }, [checkLocation, reverseGeocodeAddress, writeAuditLog])
 

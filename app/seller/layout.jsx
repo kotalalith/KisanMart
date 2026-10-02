@@ -39,7 +39,7 @@ export default function SellerLayout({
             <NotificationCenterDrawer />
           </div>
         </header>
-        <main className="flex-1 overflow-auto p-6 md:p-8 space-y-6">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-6 md:p-8 space-y-6">
           <AnnouncementBanner role="seller" />
           {children}
           <AnnouncementPopup role="seller" />
